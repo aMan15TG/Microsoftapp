@@ -1,0 +1,563 @@
+
+
+<!-- #--------------------------------------------------------- -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Speech Translation</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 800px;
+        }
+        h1 {
+            color: #4a4a4a;
+            text-align: center;
+        }
+        .flex-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 2rem;
+        }
+        .left-panel, .right-panel {
+            flex: 1;
+        }
+        .transcription-container {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 1rem;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        .controls {
+            margin-top: 1rem;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        button, select {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover, select:hover {
+            background-color: #45a049;
+        }
+        .status {
+            margin-top: 1rem;
+            text-align: center;
+            font-style: italic;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Professional Speech Translation</h1>
+        <div class="flex-container">
+            <div class="left-panel">
+                <div class="controls">
+                    <select id="languageSelect">
+                        <option value="en">English</option>
+                        <option value="es">Español</option>
+                        <option value="fr">Français</option>
+                        <option value="de">Deutsch</option>
+                        <option value="it">Italiano</option>
+                        <option value="ja">日本語</option>
+                        <option value="hi">हिन्दी</option>
+                        <option value="ko">한국어</option>
+                        <option value="zh">简体中文</option>
+                        <option value="ru">Русский</option>
+                        <option value="ar">العربية</option>
+                    </select>
+                    <button id="startButton">Start Speaking</button>
+                    <button id="stopButton" style="display: none;">Stop</button>
+                </div>
+                <div id="status" class="status">Ready to start</div>
+            </div>
+        </div>
+        <div class="right-panel">
+            <div id="transcriptionContainer" class="transcription-container"></div>
+        </div>
+    </div>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+const stopButton = document.getElementById('stopButton');
+const status = document.getElementById('status');
+const transcriptionContainer = document.getElementById('transcriptionContainer');
+const languageSelect = document.getElementById('languageSelect');
+
+let recognition;
+let isRecording = false;
+let translationBuffer = '';
+let lastTranslationRequest = null;
+let translationQueue = [];
+
+if ('webkitSpeechRecognition' in window) {
+    recognition = new webkitSpeechRecognition();
+    // Optimize settings for better real-time performance
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.lang = 'en-US';
+
+    // Increase accuracy by adjusting properties
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+        isRecording = true;
+        status.textContent = 'Listening...';
+        startButton.style.display = 'none';
+        stopButton.style.display = 'inline-block';
+        translationBuffer = '';
+        translationQueue = [];
+    };
+
+    recognition.onend = () => {
+        if (isRecording) {
+            // Restart recognition immediately to prevent gaps
+            setTimeout(() => recognition.start(), 50);
+        }
+    };
+
+    recognition.onerror = (event) => {
+        if (event.error === 'no-speech') {
+            // Restart on no-speech error
+            if (isRecording) {
+                recognition.stop();
+                setTimeout(() => recognition.start(), 50);
+            }
+        }
+        console.error('Recognition error:', event.error);
+    };
+
+    // Optimized translation function with request debouncing
+    const translateWithDebounce = (() => {
+        let timeout = null;
+        return async (text) => {
+            if (timeout) clearTimeout(timeout);
+            
+            timeout = setTimeout(async () => {
+                if (!text.trim()) return;
+                
+                try {
+                    const response = await fetch('/translate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: text,
+                            targetLanguage: languageSelect.value
+                        })
+                    });
+
+                    if (!response.ok) throw new Error('Translation failed');
+                    
+                    const data = await response.json();
+                    displayText(data.translatedText);
+                } catch (error) {
+                    console.error('Translation error:', error);
+                }
+            }, 100); // Reduced debounce delay for faster response
+        };
+    })();
+
+    // Optimized result handler for faster processing
+    recognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        // Process results more efficiently
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+
+        // Handle the translation based on selected language
+        if (languageSelect.value === 'en') {
+            // For English, display directly without translation
+            displayText(finalTranscript || interimTranscript);
+        } else {
+            // For other languages, translate with optimized debouncing
+            const textToTranslate = finalTranscript || interimTranscript;
+            if (textToTranslate.trim()) {
+                translateWithDebounce(textToTranslate);
+            }
+        }
+    };
+
+    // Optimized display function
+    function displayText(text) {
+        if (!text.trim()) return;
+        
+        // Use innerHTML for better performance with formatted text
+        transcriptionContainer.innerHTML = text
+            .replace(/\n/g, '<br>')
+            .replace(/\s\s/g, '&nbsp;&nbsp;');
+        
+        // Smooth auto-scroll
+        requestAnimationFrame(() => {
+            transcriptionContainer.scrollTop = transcriptionContainer.scrollHeight;
+        });
+    }
+
+    // Enhanced start button handler
+    startButton.onclick = () => {
+        isRecording = true;
+        translationBuffer = '';
+        transcriptionContainer.innerHTML = '';
+        try {
+            recognition.start();
+        } catch (error) {
+            console.error('Start error:', error);
+            recognition.stop();
+            setTimeout(() => recognition.start(), 50);
+        }
+    };
+
+    // Clean stop handler
+    stopButton.onclick = () => {
+        isRecording = false;
+        recognition.stop();
+        status.textContent = 'Stopped';
+        startButton.style.display = 'inline-block';
+        stopButton.style.display = 'none';
+    };
+
+    // Optimized language change handler
+    languageSelect.onchange = () => {
+        if (translationBuffer.trim()) {
+            translateWithDebounce(translationBuffer);
+        }
+    };
+
+} else {
+    status.textContent = 'Speech recognition is not supported in this browser.';
+    startButton.style.display = 'none';
+}
+    </script>
+</body>
+</html> 
+
+
+<!-- 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Speech Translation</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 800px;
+        }
+        h1 {
+            color: #4a4a4a;
+            text-align: center;
+        }
+        .flex-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 2rem;
+        }
+        .left-panel, .right-panel {
+            flex: 1;
+        }
+        .transcription-container {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 1rem;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        .controls {
+            margin-top: 1rem;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        button, select {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover, select:hover {
+            background-color: #45a049;
+        }
+        .status {
+            margin-top: 1rem;
+            text-align: center;
+            font-style: italic;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Professional Speech Translation</h1>
+        <div class="flex-container">
+            <div class="left-panel">
+                <div class="controls">
+                    <select id="languageSelect">
+                        <option value="en">English</option>
+                        <option value="es">Español</option>
+                        <option value="fr">Français</option>
+                        <option value="de">Deutsch</option>
+                        <option value="it">Italiano</option>
+                        <option value="ja">日本語</option>
+                        <option value="hi">हिन्दी</option>
+                        <option value="ko">한국어</option>
+                        <option value="zh-Hans">简体中文</option>
+                        <option value="ru">Русский</option>
+                        <option value="ar">العربية</option>
+                    </select>
+                    <button id="startButton">Start Speaking</button>
+                    <button id="stopButton" style="display: none;">Stop</button>
+                </div>
+                <div id="status" class="status">Ready to start</div>
+            </div>
+        </div>
+        <div class="right-panel">
+            <div id="transcriptionContainer" class="transcription-container"></div>
+        </div>
+    </div>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const status = document.getElementById('status');
+        const transcriptionContainer = document.getElementById('transcriptionContainer');
+        const languageSelect = document.getElementById('languageSelect');
+
+        let recognition;
+        let isRecording = false;
+        let translationBuffer = '';
+        let lastTranslationRequest = null;
+        let translationQueue = [];
+
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            // Optimize settings for better real-time performance
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+            recognition.lang = 'en-US';
+
+            // Increase accuracy by adjusting properties
+            recognition.interimResults = true;
+
+            recognition.onstart = () => {
+                isRecording = true;
+                status.textContent = 'Listening...';
+                startButton.style.display = 'none';
+                stopButton.style.display = 'inline-block';
+                translationBuffer = '';
+                translationQueue = [];
+            };
+
+            recognition.onend = () => {
+                if (isRecording) {
+                    // Restart recognition immediately to prevent gaps
+                    setTimeout(() => recognition.start(), 50);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                if (event.error === 'no-speech') {
+                    // Restart on no-speech error
+                    if (isRecording) {
+                        recognition.stop();
+                        setTimeout(() => recognition.start(), 50);
+                    }
+                } else if (event.error === 'aborted') {
+                    // Handle aborted error
+                    if (isRecording) {
+                        status.textContent = 'Speech recognition aborted. Restarting...';
+                        recognition.stop();
+                        setTimeout(() => {
+                            recognition.start();
+                            status.textContent = 'Listening...';
+                        }, 1000);
+                    }
+                } else {
+                    // Handle other errors
+                    console.error('Recognition error:', event.error);
+                    status.textContent = 'Speech recognition error. Please try again.';
+                    isRecording = false;
+                    startButton.style.display = 'inline-block';
+                    stopButton.style.display = 'none';
+                }
+            };
+
+            // Optimized translation function with request debouncing
+            const translateWithDebounce = (() => {
+                let timeout = null;
+                return async (text) => {
+                    if (timeout) clearTimeout(timeout);
+                    
+                    timeout = setTimeout(async () => {
+                        if (!text.trim()) return;
+                        
+                        try {
+                            const response = await fetch('/translate', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    text: text,
+                                    targetLanguage: languageSelect.value
+                                })
+                            });
+
+                            if (!response.ok) throw new Error('Translation failed');
+                            
+                            const data = await response.json();
+                            displayText(data.translatedText);
+                        } catch (error) {
+                            console.error('Translation error:', error);
+                        }
+                    }, 100); // Reduced debounce delay for faster response
+                };
+            })();
+
+            // Optimized result handler for faster processing
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                // Process results more efficiently
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                // Handle the translation based on selected language
+                if (languageSelect.value === 'en') {
+                    // For English, display directly without translation
+                    displayText(finalTranscript || interimTranscript);
+                } else {
+                    // For other languages, translate with optimized debouncing
+                    const textToTranslate = finalTranscript || interimTranscript;
+                    if (textToTranslate.trim()) {
+                        translateWithDebounce(textToTranslate);
+                    }
+                }
+            };
+
+            // Optimized display function
+            function displayText(text) {
+                if (!text.trim()) return;
+                
+                // Use innerHTML for better performance with formatted text
+                transcriptionContainer.innerHTML = text
+                    .replace(/\n/g, '<br>')
+                    .replace(/\s\s/g, '&nbsp;&nbsp;');
+                
+                // Smooth auto-scroll
+                requestAnimationFrame(() => {
+                    transcriptionContainer.scrollTop = transcriptionContainer.scrollHeight;
+                });
+            }
+
+            // Enhanced start button handler
+            startButton.onclick = () => {
+    if (!isRecording) {
+        isRecording = true;
+        translationBuffer = '';
+        transcriptionContainer.innerHTML = '';
+        try {
+            recognition.start();
+        } catch (error) {
+            console.error('Start error:', error);
+            isRecording = false;
+            status.textContent = 'Error starting speech recognition. Please try again.';
+        }
+    }
+};
+
+            // Clean stop handler
+            stopButton.onclick = () => {
+                isRecording = false;
+                recognition.stop();
+                status.textContent = 'Stopped';
+                startButton.style.display = 'inline-block';
+                stopButton.style.display = 'none';
+            };
+
+            // Optimized language change handler
+            languageSelect.onchange = () => {
+                if (translationBuffer.trim()) {
+                    translateWithDebounce(translationBuffer);
+                }
+            };
+
+        } else {
+            status.textContent = 'Speech recognition is not supported in this browser.';
+            startButton.style.display = 'none';
+        }
+    </script>
+</body>
+</html> -->
