@@ -1,5 +1,4 @@
 Flask
 Flask-Cors
 azure-cognitiveservices-speech
-pyaudio
 openai
