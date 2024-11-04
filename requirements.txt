@@ -1,5 +1,5 @@
-Flask==2.0.3
-Flask-Cors==3.0.10
-azure-cognitiveservices-speech==1.19.0
-pyaudio==0.2.11
-openai==0.27.0
+Flask
+Flask-Cors
+azure-cognitiveservices-speech
+pyaudio
+openai
