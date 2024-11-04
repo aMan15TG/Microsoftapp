@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 openai.api_key = "sk-proj-lBODI9Vs4FBc60Yz3QOWL8JXi_6EaNOSvX1jXMtd5RYZw-8lIe7K2JlkwmT3BlbkFJ2ige8No_gJ5_rNdgLeFM1ozuRi-zEGL28kyE6bsCce5GSTMsdwA"
 
-speech_key, service_region = "1yrNDe16LKhM1wGakO5XQs97S19hNZNvupqZ92UEJyM42zO3s72yJQQJ99AJACYeBjFXJ3w3AAs", "eastus"
+speech_key, service_region = "kB8Tt5fBgJt7r1hz4P98qx5tq55I0gvugyjhfAzPyBmHTddnN6WJJQQJ99AJACL93NaXJ3w3AAAYACOGPMpm", "australiaeast"
 
 # Global variables for live streaming
 is_streaming = False
