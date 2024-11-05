@@ -3,4 +3,4 @@ Flask-Cors
 azure-cognitiveservices-speech
 openai
 gunicorn
-pyaudio
+pipwin
