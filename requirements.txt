@@ -1,6 +1,1 @@
-Flask
-Flask-Cors
-azure-cognitiveservices-speech
-openai
-gunicorn
-pipwin
+pyaduio
