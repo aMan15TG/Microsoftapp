@@ -1,1 +1,5 @@
-portaudio19-dev
+flask
+flask-cors
+openai
+pyaudio
+azure-cognitiveservices-speech
